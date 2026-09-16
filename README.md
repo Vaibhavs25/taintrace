@@ -4,6 +4,16 @@
 
 `taintrace` scans your lockfiles (Cargo.lock, package-lock.json, requirements.txt, go.sum) for package names that suspiciously resemble known legitimate packages — the exact vector used in the [arrayref@0.3.10 attack](https://github.com/rustsec/advisory-db/pull/2045) (August 2026), where `proc-macro1` imitated `proc-macro2` to execute arbitrary code during `cargo build`.
 
+## Table of contents
+
+- [The Problem](#the-problem)
+- [Install](#install)
+- [Usage](#usage)
+- [Example typosquat reports](examples/reports/README.md)
+- [Algorithms](#algorithms)
+- [Multi-ecosystem](#multi-ecosystem)
+- [CI/CD integration](#cicd-integration)
+
 ## The Problem
 
 AI coding agents install dependencies automatically. Typosquats pass undetected by scanners like `cargo audit` or `npm audit` because they have **no known CVE** — they're brand new packages with malicious build.rs or proc-macros.
