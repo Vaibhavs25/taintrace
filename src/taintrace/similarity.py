@@ -4,6 +4,14 @@ from typing import List, Tuple
 
 
 class SimilarityEngine:
+    CONFUSABLES = str.maketrans({
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+        "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
+        "ɡ": "g", "ɑ": "a", "ε": "e", "ο": "o", "υ": "u",
+        "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
+        "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
+    })
+
     """Calculate similarity between package names using multiple algorithms."""
 
     def similarity(self, name1: str, name2: str) -> float:
@@ -17,12 +25,15 @@ class SimilarityEngine:
         # Phonetic similarity using Soundex
         phonetic_score = self._phonetic_similarity(name1, name2)
         
-        # Substring matching
+        # Substring and homoglyph matching
         substring_score = self._substring_similarity(name1, name2)
-        
-        # Weighted combination
-        return max(lev_score * 0.6 + phonetic_score * 0.2 + substring_score * 0.2, 
-                   lev_score, phonetic_score, substring_score)
+        homoglyph_score = self._homoglyph_similarity(name1, name2)
+
+        # A normalized homoglyph match is a strong signal by itself.
+        return max(
+            lev_score * 0.5 + phonetic_score * 0.1 + substring_score * 0.1 + homoglyph_score * 0.3,
+            lev_score, phonetic_score, substring_score, homoglyph_score,
+        )
 
     def levenshtein(self, s1: str, s2: str) -> int:
         """Calculate Levenshtein distance between two strings."""
@@ -84,6 +95,16 @@ class SimilarityEngine:
             if len(result) == 4:
                 break
         return ''.join(result).ljust(4, '0')
+
+    def _normalize_homoglyphs(self, s: str) -> str:
+        """Normalize a small, high-confidence set of Unicode confusables."""
+        return s.lower().translate(self.CONFUSABLES)
+
+    def _homoglyph_similarity(self, s1: str, s2: str) -> float:
+        """Compare names after normalizing visually confusable characters."""
+        return self._levenshtein_similarity(
+            self._normalize_homoglyphs(s1), self._normalize_homoglyphs(s2)
+        )
 
     def _substring_similarity(self, s1: str, s2: str) -> float:
         """Check if one string contains the other."""
