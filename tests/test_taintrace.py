@@ -254,3 +254,55 @@ version = "4.5.0"
         results = detector.scan(cargo_lock)
         suspicious = [r for r in results if r.is_suspect]
         assert len(suspicious) == 0
+
+
+def test_detector_similarity_threshold_controls_matches(monkeypatch):
+    from taintrace.detector import TyposquatDetector
+    detector = TyposquatDetector(ecosystem="node", similarity_threshold=0.83)
+    seen = {}
+    original = detector.db.get_similar
+
+    def capture(name, threshold=0.8, ecosystem=None):
+        seen["threshold"] = threshold
+        return original(name, threshold=threshold, ecosystem=ecosystem)
+
+    monkeypatch.setattr(detector.db, "get_similar", capture)
+    detector.scan_dependency("lodas", ecosystem="node")
+    assert seen["threshold"] == 0.83
+
+
+def test_detection_result_reports_similarity_scores():
+    from taintrace.detector import TyposquatDetector
+    result = TyposquatDetector(ecosystem="node", similarity_threshold=0.7).scan_dependency(
+        "lodas", ecosystem="node"
+    )
+    assert result.similarity_scores
+    name, score = result.similarity_scores[0]
+    assert isinstance(name, str)
+    assert 0.7 <= score <= 1.0
+
+
+def test_json_report_includes_match_similarity_scores(tmp_path):
+    import json
+    from click.testing import CliRunner
+    from taintrace.cli import cli
+
+    lockfile = tmp_path / "Cargo.lock"
+    lockfile.write_text('[[package]]\nname = "proc-macro1"\nversion = "1.0.0"\n')
+    result = CliRunner().invoke(cli, ["check", str(lockfile), "--format", "json", "--threshold", "0.7"])
+    payload = json.loads(result.output)
+    item = payload["results"][0]
+    assert item["similarity_scores"]
+    assert item["similarity_scores"][0]["package"]
+    assert 0.7 <= item["similarity_scores"][0]["score"] <= 1.0
+
+
+def test_cli_rejects_similarity_threshold_outside_range(tmp_path):
+    from click.testing import CliRunner
+    from taintrace.cli import cli
+
+    lockfile = tmp_path / "requirements.txt"
+    lockfile.write_text("requests==2.32.3\n")
+    result = CliRunner().invoke(cli, ["check", str(lockfile), "--threshold", "1.1"])
+    assert result.exit_code == 2
+    assert "not in the range" in result.output

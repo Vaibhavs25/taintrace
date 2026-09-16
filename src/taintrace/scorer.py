@@ -38,7 +38,7 @@ class RiskScorer:
         from taintrace.similarity import SimilarityEngine
         self.engine = SimilarityEngine()
 
-    def score(self, package_name: str, ecosystem: str = "rust") -> RiskResult:
+    def score(self, package_name: str, ecosystem: str = "rust", similarity_threshold: float = 0.7) -> RiskResult:
         """Calculate risk score for a package name."""
         # Check if it's a known package
         if self.db.is_known(package_name, ecosystem):
@@ -51,7 +51,7 @@ class RiskScorer:
             )
 
         # Find similar known packages
-        similar = self.db.get_similar(package_name, threshold=0.7, ecosystem=ecosystem)
+        similar = self.db.get_similar(package_name, threshold=similarity_threshold, ecosystem=ecosystem)
 
         if not similar:
             return RiskResult(

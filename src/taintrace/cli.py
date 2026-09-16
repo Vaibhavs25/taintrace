@@ -31,7 +31,7 @@ def cli():
 @click.option("--format", "-f", "output_format", 
               type=click.Choice(["cli", "json", "sarif"]), default="cli",
               help="Output format")
-@click.option("--threshold", "-t", default=0.7, type=float,
+@click.option("--threshold", "-t", default=0.7, type=click.FloatRange(0.0, 1.0),
               help="Similarity threshold (0.0-1.0)")
 @click.option("--ecosystem", "-e", default="auto",
               type=click.Choice([
@@ -58,7 +58,7 @@ def check(lockfiles: tuple[Path, ...], output_format: str, threshold: float,
         if eco == "auto":
             eco = _detect_ecosystem(lockfile)
         
-        detector = TyposquatDetector(ecosystem=eco)
+        detector = TyposquatDetector(ecosystem=eco, similarity_threshold=threshold)
         results = detector.scan(lockfile)
         
         # Merge CLI --ignore with config file ignore list
@@ -151,7 +151,7 @@ def _output_cli(results: list, suspects: list, lockfiles: list[Path]):
             r.dependency.name,
             f"[{risk_style}]{r.risk_level}[/{risk_style}]",
             f"{r.risk_score:.2f}",
-            ", ".join(r.similar_packages[:3]) or "—",
+            ", ".join(f"{name} ({score:.2f})" for name, score in r.similarity_scores[:3]) or "—",
             r.reason
         )
     
@@ -180,6 +180,10 @@ def _output_json(results: list, suspects: list):
                 "risk_level": r.risk_level,
                 "risk_score": round(r.risk_score, 3),
                 "similar_to": r.similar_packages,
+                "similarity_scores": [
+                    {"package": name, "score": round(score, 3)}
+                    for name, score in r.similarity_scores
+                ],
                 "reason": r.reason,
             }
             for r in results
@@ -295,7 +299,7 @@ def _find_lockfiles(path: Path) -> list[tuple[Path, str]]:
 @click.option("--format", "-f", "output_format",
               type=click.Choice(["cli", "json", "sarif"]), default="cli",
               help="Output format")
-@click.option("--threshold", "-t", default=0.7, type=float,
+@click.option("--threshold", "-t", default=0.7, type=click.FloatRange(0.0, 1.0),
               help="Similarity threshold (0.0-1.0)")
 @click.option("--no-informational", is_flag=True,
               help="Suppress MEDIUM/LOW risk results")
@@ -318,7 +322,7 @@ def scan_directory(path: Path, output_format: str, threshold: float,
     per_file = {}
     
     for lockfile, eco in found:
-        detector = TyposquatDetector(ecosystem=eco)
+        detector = TyposquatDetector(ecosystem=eco, similarity_threshold=threshold)
         results = detector.scan(lockfile)
         
         # Merge ignores
