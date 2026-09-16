@@ -91,26 +91,68 @@ taintrace score proc-macro1
 - `0` — no suspects found
 - `1` — one or more suspects detected (use in CI/CD gates)
 
-## Ignoring False Positives
+## Configuration
 
-To permanently suppress false-positive typosquats, use a `.taintrace.toml` file in your project root:
+`taintrace` automatically discovers and loads configuration files from the current working directory, parent directories, or your user home directory:
+
+- `.taintrace.toml` / `taintrace.toml`
+- `.taintrace.yaml` / `.taintrace.yml` / `taintrace.yaml` / `taintrace.yml`
+- `pyproject.toml` (under `[tool.taintrace]`)
+- `.taintracerc`
+- `~/.config/taintrace/config.toml` (or `.yaml`)
+
+You can also explicitly pass a configuration file path using the `-c` / `--config` flag:
+
+```bash
+taintrace check Cargo.lock --config /path/to/my-config.yaml
+```
+
+### Example `.taintrace.toml`
 
 ```toml
-# .taintrace.toml
 [taintrace]
+threshold = 0.85
+format = "text"
+no_informational = true
 ignore = [
   "my-internal-mirror",
   "legit-package-with-similar-name"
 ]
 ```
 
-Or ignore packages via CLI flag:
+### Example `.taintrace.yaml`
+
+```yaml
+taintrace:
+  threshold: 0.85
+  output_format: sarif
+  no_informational: false
+  ignore:
+    - my-internal-mirror
+    - ${CUSTOM_IGNORE_PKG}
+```
+
+### Example `pyproject.toml`
+
+```toml
+[tool.taintrace]
+threshold = 0.80
+ignore = ["my-corp-pkg"]
+```
+
+### Environment Variable Interpolation
+
+Configuration values support environment variable interpolation using `$VAR` or `${VAR}` syntax (e.g. `${CI_PROJECT_NAME}` or `$SCAN_THRESHOLD`).
+
+### Ignoring False Positives
+
+To suppress specific known-safe packages via the CLI directly:
 
 ```bash
 taintrace check Cargo.lock --ignore proc-macro1 --ignore some-legit-package
 ```
 
-Ignored packages are excluded from CLI, JSON, and SARIF output.
+Ignored packages are excluded from CLI, JSON, and SARIF output. CLI flags override options defined in configuration files.
 
 ## Algorithms
 
