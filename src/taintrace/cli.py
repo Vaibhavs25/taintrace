@@ -20,7 +20,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(package_name="taintrace")
+@click.version_option(__version__, "-v", "--version")
 def cli():
     """taintrace — typosquat detector for AI coding agent dependencies."""
     pass
