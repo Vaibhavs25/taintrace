@@ -96,14 +96,14 @@ class SimilarityEngine:
                 break
         return ''.join(result).ljust(4, '0')
 
-    def _normalize_homoglyphs(self, s: str) -> str:
+    def normalize_homoglyphs(self, s: str) -> str:
         """Normalize a small, high-confidence set of Unicode confusables."""
         return s.lower().translate(self.CONFUSABLES)
 
     def _homoglyph_similarity(self, s1: str, s2: str) -> float:
         """Compare names after normalizing visually confusable characters."""
         return self._levenshtein_similarity(
-            self._normalize_homoglyphs(s1), self._normalize_homoglyphs(s2)
+            self.normalize_homoglyphs(s1), self.normalize_homoglyphs(s2)
         )
 
     def _substring_similarity(self, s1: str, s2: str) -> float:

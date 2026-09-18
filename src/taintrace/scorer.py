@@ -68,8 +68,8 @@ class RiskScorer:
 
         # Determine risk level
         homoglyph = (
-            self.engine._normalize_homoglyphs(package_name)
-            == self.engine._normalize_homoglyphs(max_similar[0])
+            self.engine.normalize_homoglyphs(package_name)
+            == self.engine.normalize_homoglyphs(max_similar[0])
             and package_name.lower() != max_similar[0].lower()
         )
         indicator = " (homoglyph)" if homoglyph else ""
