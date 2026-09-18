@@ -28,6 +28,8 @@ def cli():
 
 @cli.command()
 @click.argument("lockfiles", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option("--config", "-c", "config_file", type=click.Path(exists=True, path_type=Path),
+              default=None, help="Path to configuration file (.toml, .yaml, .json)")
 @click.option("--format", "-f", "output_format", 
               type=click.Choice(["cli", "json", "sarif"]), default="cli",
               help="Output format")
@@ -42,13 +44,34 @@ def cli():
               help="Suppress MEDIUM/LOW risk results (informational only)")
 @click.option("--ignore", "-i", multiple=True, type=str,
               help="Ignore specific packages (repeatable, can also be set in .taintrace.toml)")
-def check(lockfiles: tuple[Path, ...], output_format: str, threshold: float,
-          ecosystem: str, no_informational: bool, ignore: tuple[str, ...]):
+@click.pass_context
+def check(ctx: click.Context, lockfiles: tuple[Path, ...], config_file: Optional[Path],
+          output_format: str, threshold: float, ecosystem: str,
+          no_informational: bool, ignore: tuple[str, ...]):
     """Check one or more lockfiles for typosquatting."""
     if not lockfiles:
         click.echo("Error: at least one lockfile required", err=True)
         sys.exit(2)
     
+    from taintrace.config import load_config
+    
+    base_dir = lockfiles[0].parent if lockfiles and lockfiles[0].parent.exists() else None
+    cfg = load_config(config_path=config_file, cwd=base_dir)
+
+    # CLI flags override config values; if CLI flag is at default, check config
+    if ctx.get_parameter_source("output_format") == click.core.ParameterSource.DEFAULT:
+        output_format = cfg.get("output_format", output_format)
+    if ctx.get_parameter_source("threshold") == click.core.ParameterSource.DEFAULT:
+        threshold = cfg.get("threshold", threshold)
+    if ctx.get_parameter_source("ecosystem") == click.core.ParameterSource.DEFAULT:
+        ecosystem = cfg.get("ecosystem", ecosystem)
+    if ctx.get_parameter_source("no_informational") == click.core.ParameterSource.DEFAULT:
+        no_informational = cfg.get("no_informational", no_informational)
+    
+    config_ignored = set(cfg.get("ignore", []))
+    cli_ignored = set(ignore)
+    all_ignored_base = config_ignored | cli_ignored
+
     all_results = []
     all_suspects = []
     
@@ -61,13 +84,12 @@ def check(lockfiles: tuple[Path, ...], output_format: str, threshold: float,
         detector = TyposquatDetector(ecosystem=eco)
         results = detector.scan(lockfile)
         
-        # Merge CLI --ignore with config file ignore list
-        config_ignored = set()
-        if lockfile.parent.exists():
+        # Merge per-lockfile directory config if no explicit config was passed
+        file_ignored = set()
+        if config_file is None and lockfile.parent.exists() and lockfile.parent != base_dir:
             from taintrace.config import get_ignored_packages
-            config_ignored = set(get_ignored_packages(lockfile.parent))
-        cli_ignored = set(ignore)
-        all_ignored = config_ignored | cli_ignored
+            file_ignored = set(get_ignored_packages(lockfile.parent))
+        all_ignored = all_ignored_base | file_ignored
         
         # Filter out ignored packages
         if all_ignored:
@@ -292,6 +314,8 @@ def _find_lockfiles(path: Path) -> list[tuple[Path, str]]:
 
 @cli.command()
 @click.argument("path", type=click.Path(exists=True, path_type=Path), default=".")
+@click.option("--config", "-c", "config_file", type=click.Path(exists=True, path_type=Path),
+              default=None, help="Path to configuration file (.toml, .yaml, .json)")
 @click.option("--format", "-f", "output_format",
               type=click.Choice(["cli", "json", "sarif"]), default="cli",
               help="Output format")
@@ -301,9 +325,23 @@ def _find_lockfiles(path: Path) -> list[tuple[Path, str]]:
               help="Suppress MEDIUM/LOW risk results")
 @click.option("--ignore", "-i", multiple=True, type=str,
               help="Ignore specific packages (repeatable)")
-def scan_directory(path: Path, output_format: str, threshold: float,
+@click.pass_context
+def scan_directory(ctx: click.Context, path: Path, config_file: Optional[Path],
+                   output_format: str, threshold: float,
                    no_informational: bool, ignore: tuple[str, ...]):
     """Recursively scan a directory tree for typosquatting in all lockfiles."""
+    from taintrace.config import load_config
+    
+    cfg = load_config(config_path=config_file, cwd=path if path.is_dir() else path.parent)
+    if ctx.get_parameter_source("output_format") == click.core.ParameterSource.DEFAULT:
+        output_format = cfg.get("output_format", output_format)
+    if ctx.get_parameter_source("threshold") == click.core.ParameterSource.DEFAULT:
+        threshold = cfg.get("threshold", threshold)
+    if ctx.get_parameter_source("no_informational") == click.core.ParameterSource.DEFAULT:
+        no_informational = cfg.get("no_informational", no_informational)
+
+    base_ignored = set(cfg.get("ignore", [])) | set(ignore)
+
     found = _find_lockfiles(path)
     
     if not found:
@@ -322,11 +360,11 @@ def scan_directory(path: Path, output_format: str, threshold: float,
         results = detector.scan(lockfile)
         
         # Merge ignores
-        config_ignored = set()
-        if lockfile.parent.exists():
+        file_ignored = set()
+        if config_file is None and lockfile.parent.exists() and lockfile.parent != path:
             from taintrace.config import get_ignored_packages
-            config_ignored = set(get_ignored_packages(lockfile.parent))
-        all_ignored = config_ignored | set(ignore)
+            file_ignored = set(get_ignored_packages(lockfile.parent))
+        all_ignored = base_ignored | file_ignored
         
         if all_ignored:
             results = [r for r in results if r.dependency.name not in all_ignored]
