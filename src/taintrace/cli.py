@@ -293,6 +293,9 @@ LOCKFILE_NAMES = {
     "Package.resolved": "swift",
     "Package.swift": "swift",
     "mix.lock": "elixir",
+    "build.gradle": "java",
+    "build.gradle.kts": "java",
+    "libs.versions.toml": "java",
 }
 
 # Directories to skip during recursive walk

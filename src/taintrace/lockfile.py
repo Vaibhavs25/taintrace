@@ -34,6 +34,9 @@ EXTENDED_FORMATS = {
     "package.resolved": ("swift", "_parse_package_resolved"),
     "package.swift": ("swift", "_parse_package_swift"),
     "mix.lock": ("elixir", "_parse_mix_lock"),
+    "build.gradle": ("java", "_parse_gradle"),
+    "build.gradle.kts": ("java", "_parse_gradle"),
+    "libs.versions.toml": ("java", "_parse_gradle_version_catalog"),
 }
 
 
@@ -57,6 +60,50 @@ class LockfileParser:
         else:
             # Try as Cargo.lock by default
             return self._parse_cargo(path)
+
+    def _parse_gradle(self, path: Path) -> List[Dependency]:
+        """Parse literal Maven coordinates from Gradle Groovy/Kotlin build files."""
+        content = path.read_text(encoding="utf-8", errors="replace")
+        deps = []
+        pattern = re.compile(
+            r"(?:implementation|api|compileOnly|runtimeOnly|testImplementation|"
+            r"testCompileOnly|testRuntimeOnly|annotationProcessor|kapt)\s*"
+            r"(?:\(\s*)?[\"']([^\"']+:[^\"']+:[^\"']+)[\"']"
+        )
+        for match in pattern.finditer(content):
+            coordinate = match.group(1)
+            group, name, version = coordinate.split(":", 2)
+            deps.append(Dependency(name=f"{group}:{name}", version=version, ecosystem="java"))
+        return deps
+
+    def _parse_gradle_version_catalog(self, path: Path) -> List[Dependency]:
+        """Parse Gradle version-catalog library entries from libs.versions.toml."""
+        content = path.read_text(encoding="utf-8", errors="replace")
+        versions = {}
+        section = ""
+        deps = []
+        for raw_line in content.splitlines():
+            line = raw_line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            section_match = re.match(r"^\[([^]]+)\]$", line)
+            if section_match:
+                section = section_match.group(1)
+                continue
+            if section == "versions":
+                match = re.match(r'^[\w.-]+\s*=\s*["\']([^"\']+)["\']', line)
+                if match:
+                    key = line.split("=", 1)[0].strip()
+                    versions[key] = match.group(1)
+            elif section == "libraries":
+                module = re.search(r'module\s*=\s*["\']([^"\']+)["\']', line)
+                if not module:
+                    continue
+                direct = re.search(r'(?<!\.)version\s*=\s*["\']([^"\']+)["\']', line)
+                ref = re.search(r'version\.ref\s*=\s*["\']([^"\']+)["\']', line)
+                version = direct.group(1) if direct else versions.get(ref.group(1), "") if ref else ""
+                deps.append(Dependency(name=module.group(1), version=version, ecosystem="java"))
+        return deps
 
     def _parse_poetry(self, path: Path) -> List[Dependency]:
         """Parse Poetry lockfile (poetry.lock TOML format)."""
