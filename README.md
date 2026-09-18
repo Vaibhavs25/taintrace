@@ -161,6 +161,8 @@ Ignored packages are excluded from CLI, JSON, and SARIF output. CLI flags overri
 - **Substring matching** — detects containment ("lodash" vs "lodash1")
 - **Combined scoring** — weighted combination of all signals
 
+Use `--threshold` with `check` or `scan-directory` to set the minimum similarity considered during matching. The default is `0.7`; higher values require closer package-name matches. Reports include each matched package with its similarity score.
+
 ## Multi-ecosystem
 
 | Ecosystem | Lockfiles                              | Status |

@@ -15,17 +15,19 @@ class DetectionResult:
     risk_level: str
     risk_score: float
     similar_packages: List[str]
+    similarity_scores: List[tuple[str, float]]
     reason: str
 
 
 class TyposquatDetector:
     """Detect typosquatting in lockfiles."""
 
-    def __init__(self, ecosystem: str = "rust"):
+    def __init__(self, ecosystem: str = "rust", similarity_threshold: float = 0.7):
         """Initialize detector for specific ecosystem."""
         from taintrace.db import KnownPackagesDB
         from taintrace.scorer import RiskScorer
         self.ecosystem = ecosystem
+        self.similarity_threshold = similarity_threshold
         self.db = KnownPackagesDB()
         self.scorer = RiskScorer(self.db)
 
@@ -55,7 +57,7 @@ class TyposquatDetector:
 
     def _score_dep(self, dep) -> DetectionResult:
         """Score a single dependency for typosquat risk."""
-        result = self.scorer.score(dep.name, dep.ecosystem)
+        result = self.scorer.score(dep.name, dep.ecosystem, self.similarity_threshold)
         is_suspect = result.level.value >= 2  # HIGH or CRITICAL
 
         return DetectionResult(
@@ -64,5 +66,6 @@ class TyposquatDetector:
             risk_level=str(result.level),
             risk_score=result.score,
             similar_packages=[name for name, _ in result.similar_packages],
+            similarity_scores=result.similar_packages,
             reason=result.reason
         )
