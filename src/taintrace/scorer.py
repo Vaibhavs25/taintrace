@@ -67,12 +67,18 @@ class RiskScorer:
         max_similarity = max_similar[1]
 
         # Determine risk level
+        homoglyph = (
+            self.engine._normalize_homoglyphs(package_name)
+            == self.engine._normalize_homoglyphs(max_similar[0])
+            and package_name.lower() != max_similar[0].lower()
+        )
+        indicator = " (homoglyph)" if homoglyph else ""
         if max_similarity >= 0.95:
             level = RiskLevel.CRITICAL
-            reason = f"Near-identical to '{max_similar[0]}' — likely typosquat"
+            reason = f"Near-identical to '{max_similar[0]}' — likely typosquat{indicator}"
         elif max_similarity >= 0.85:
             level = RiskLevel.HIGH
-            reason = f"Very similar to '{max_similar[0]}' — possible typosquat"
+            reason = f"Very similar to '{max_similar[0]}' — possible typosquat{indicator}"
         elif max_similarity >= 0.75:
             level = RiskLevel.MEDIUM
             reason = f"Somewhat similar to '{max_similar[0]}'"

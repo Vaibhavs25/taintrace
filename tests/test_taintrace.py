@@ -122,6 +122,21 @@ class TestSimilarityEngine:
         score = engine.similarity("night", "nite")
         assert score >= 0.5
 
+    def test_homoglyph_cyrillic_confusables(self):
+        engine = SimilarityEngine()
+        assert engine.similarity("react", "rеаct") >= 0.95
+        assert engine._normalize_homoglyphs("rеаct") == "react"
+
+    def test_homoglyph_mixed_scripts_and_fullwidth_digits(self):
+        engine = SimilarityEngine()
+        assert engine.similarity("paypal", "pаypal") == 1.0
+        assert engine.similarity("pkg123", "pkg１２３") == 1.0
+
+    def test_homoglyph_ascii_behavior_is_unchanged(self):
+        engine = SimilarityEngine()
+        assert engine._normalize_homoglyphs("React") == "react"
+        assert engine._homoglyph_similarity("abc", "xyz") == 0.0
+
     def test_levenshtein_distance(self):
         """Levenshtein distance between 'kitten' and 'sitting' is 3."""
         engine = SimilarityEngine()
@@ -185,6 +200,12 @@ class TestRiskScorer:
         scorer = RiskScorer()
         result = scorer.score("proc-macro1")
         assert result.level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
+
+    def test_homoglyph_reason_is_reported(self):
+        scorer = RiskScorer()
+        result = scorer.score("rеаct", ecosystem="node")
+        assert result.level == RiskLevel.CRITICAL
+        assert "(homoglyph)" in result.reason
 
     def test_unknown_package_medium_risk(self):
         """Unknown packages should be MEDIUM risk (not known, not typosquat)."""
