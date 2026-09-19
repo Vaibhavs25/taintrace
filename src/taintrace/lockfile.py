@@ -225,7 +225,54 @@ class LockfileParser:
             if not line or line.startswith("#"):
                 continue
 
-            dep_match = re.match(r'^([a-zA-Z0-9_-]+)\s*=\s*(.+?)\s*(?:#.*)?
+            dep_match = re.match(r'^([a-zA-Z0-9_-]+)\s*=\s*(.+?)\s*(?:#.*)?$', line)
+            if not dep_match:
+                continue
+
+            name, spec = dep_match.groups()
+            quoted_version = re.fullmatch(r'"([^"]+)"', spec)
+            if quoted_version:
+                versions[name] = quoted_version.group(1)
+                continue
+
+            version_match = re.search(r'version\s*=\s*"([^"]+)"', spec)
+            if version_match:
+                versions[name] = version_match.group(1)
+
+
+        return versions
+
+    def _parse_cargo_toml(self, path: Path) -> List[Dependency]:
+        """Parse Cargo.toml dependency sections, including workspace-inherited versions."""
+        deps = []
+        content = path.read_text(encoding="utf-8", errors="replace")
+
+        workspace_root = self._find_cargo_workspace_root(path)
+        workspace_versions = self._parse_cargo_workspace_dependencies(workspace_root)
+
+        sections = re.split(r"^\[(?:dev-|build-)?dependencies\]\s*$", content, flags=re.MULTILINE)
+        for section in sections[1:]:
+            for line in section.strip().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or line.startswith("["):
+                    break
+
+                name_match = re.match(r'^([a-zA-Z0-9_-]+)\s*=\s*', line)
+                if not name_match:
+                    continue
+
+                name = name_match.group(1)
+                workspace_inherited = re.search(r'\bworkspace\s*=\s*true\b', line) is not None
+
+                if workspace_inherited:
+                    version = workspace_versions.get(name, "workspace")
+                else:
+                    ver_match = re.search(r'version\s*=\s*"([^"]+)"', line)
+                    version = ver_match.group(1) if ver_match else "0.0.0"
+
+                deps.append(Dependency(name=name, version=version, ecosystem="rust"))
+
+        return deps
     def _parse_cargo(self, path: Path) -> List[Dependency]:
         """Parse Cargo.lock TOML format."""
         deps = []
