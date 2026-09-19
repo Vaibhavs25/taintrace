@@ -99,3 +99,48 @@ def test_parse_pipfile_lock_missing(tmp_path):
     # Direct call - parse() would default to cargo for unknown ext
     deps = parser._parse_pipfile_lock(pipfile)
     assert deps == []
+
+
+
+def test_parse_cargo_toml_resolves_workspace_dependency(tmp_path):
+    """Resolve a workspace-inherited dependency from the root Cargo.toml."""
+    workspace = tmp_path / "workspace"
+    member = workspace / "member"
+    member.mkdir(parents=True)
+
+    (workspace / "Cargo.toml").write_text(
+        "[workspace]\n"
+        "members = [\"member\"]\n\n"
+        "[workspace.dependencies]\n"
+        "serde = \"1.0\"\n"
+    )
+    cargo = member / "Cargo.toml"
+    cargo.write_text(
+        "[package]\n"
+        "name = \"member\"\n\n"
+        "[dependencies]\n"
+        "serde = { workspace = true }\n"
+    )
+
+    deps = LockfileParser().parse(cargo)
+
+    assert [(d.name, d.version, d.ecosystem) for d in deps] == [
+        ("serde", "1.0", "rust")
+    ]
+
+
+def test_parse_cargo_toml_keeps_workspace_marker_without_root(tmp_path):
+    """Keep workspace-inherited dependencies when the workspace root is unavailable."""
+    cargo = tmp_path / "Cargo.toml"
+    cargo.write_text(
+        "[package]\n"
+        "name = \"member\"\n\n"
+        "[dependencies]\n"
+        "serde = { workspace = true }\n"
+    )
+
+    deps = LockfileParser().parse(cargo)
+
+    assert [(d.name, d.version, d.ecosystem) for d in deps] == [
+        ("serde", "workspace", "rust")
+    ]
